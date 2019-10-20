@@ -15,48 +15,27 @@
 */
 using System;
 using System.Drawing;
-using System.Text.RegularExpressions;
-using System.Windows.Forms;
 
 namespace Calculator
 {
     /// <summary>
     /// Main Window
     /// </summary>
-    public partial class MainWindow : Form
+    public partial class MainWindow
     {
-        /// <summary>
-        /// Window size (only textbox visible)
-        /// </summary>
-        private Size NullSize = new Size(467, 50);
-        /// <summary>
-        /// Window size (textbox + decimal value visible)
-        /// </summary>
-        private Size HalfSize = new Size(467, 83);
-        /// <summary>
-        /// Window size (textbox + decimal, hex, binary value visible)
-        /// </summary>
-        private Size FullSize = new Size(467, 150);
-        /// <summary>
-        /// Window size (textbox + decimal, hex, binary (2 lines) value visible)
-        /// </summary>
-        private Size FullSizeTwoBinaryLines = new Size(467, 175);
-        /// <summary>
-        /// Window size (textbox + decimal, hex, binary (3 lines) value visible)
-        /// </summary>
-        private Size FullSizeThreeBinaryLines = new Size(467, 200);
 
         /// <summary>
         /// Operational mode for expression evaluation
         /// </summary>
         private CalculatorMode Mode { get; set; }
 
+        private readonly ConsoleEmulator emulator = new ConsoleEmulator();
+
         /// <summary>
         /// Constructor, init form
         /// </summary>
         public MainWindow()
         {
-            InitializeComponent();
             ClearLabels();
             this.Mode = CalculatorMode.Mathematics;
         }
@@ -66,22 +45,18 @@ namespace Calculator
         /// </summary>
         private void ClearLabels()
         {
-            this.ClientSize = NullSize;
-            txtInput.BackColor = Color.Silver;
-            txtResultDecimal.Text = "";
-            txtResultHex.Text = "";
-            txtResultBits.Text = "";
+            emulator.txtResultDecimal = "";
+            emulator.txtResultHex = "";
+            emulator.txtResultBits = "";
 
             switch (this.Mode)
             {
                 default:
                 case CalculatorMode.Mathematics:
-                    lblMode.Text = "M";
-                    lblMode.BackColor = Color.Green;
+                    emulator.lblMode = "M";
                     break;
                 case CalculatorMode.Programming:
-                    lblMode.Text = "P";
-                    lblMode.BackColor = Color.RoyalBlue;
+                    emulator.lblMode = "P";
                     break;
             }
         }
@@ -94,10 +69,10 @@ namespace Calculator
         private void txtInput_TextChanged(object sender, EventArgs e)
         {
             ClearLabels();
-            if (String.IsNullOrWhiteSpace(txtInput.Text))
+            if (String.IsNullOrWhiteSpace(emulator.txtInput))
                 return;
 
-            Calculator calc = new Calculator(txtInput.Text);
+            Calculator calc = new Calculator(emulator.txtInput);
             calc.Mode = this.Mode;
             double? result = null;
             try
@@ -113,30 +88,20 @@ namespace Calculator
             {
                 Int64 intResult = (Int64)result;
 
-                txtResultDecimal.Text = result.ToString();
+                emulator.txtResultDecimal = result.ToString();
 
                 if (result == ((double)intResult))
                 {
                     // This is a whole number
-                    txtResultHex.Text = String.Join(" ", intResult.ToString("X").Reverse().SplitEveryNth(2)).Reverse();
+                    emulator.txtResultHex = String.Join(" ", intResult.ToString("X").Reverse().SplitEveryNth(2)).Reverse();
 
-                    txtResultBits.Text = String.Join(" ", Convert.ToString(intResult, 2).Reverse().SplitEveryNth(4)).Reverse();
-
-                    if (txtResultBits.Text.Length > 100)
-                        this.ClientSize = FullSizeThreeBinaryLines;
-                    else if (txtResultBits.Text.Length > 50)
-                        this.ClientSize = FullSizeTwoBinaryLines;
-                    else
-                        this.ClientSize = FullSize;
+                    emulator.txtResultBits = String.Join(" ", Convert.ToString(intResult, 2).Reverse().SplitEveryNth(4)).Reverse();
                 }
                 else
                 {
-                    this.ClientSize = HalfSize;
+                    emulator.txtResultHex = "";
+                    emulator.txtResultBits = "";
                 }
-            }
-            else
-            {
-                txtInput.BackColor = Color.Salmon;
             }
         }
 
@@ -145,12 +110,12 @@ namespace Calculator
         /// </summary>
         /// <param name="sender">calling object</param>
         /// <param name="e">event arguments</param>
-        private void txtInput_KeyDown(object sender, KeyEventArgs e)
+        private void txtInput_KeyDown(object sender, ConsoleKeyInfo e)
         {
-            if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Return)
+            if (e.Key == ConsoleKey.Enter)
             {
                 bool handled = false;
-                switch (txtInput.Text)
+                switch (emulator.txtInput)
                 {
                     // Set to mathematics mode
                     case "m":
@@ -164,92 +129,33 @@ namespace Calculator
                         break;
                     // Enter "save/store" mode
                     default:
-                        txtInput.Enabled = false;
-                        txtStore.Visible = true;
-                        txtStore.Focus();
                         break;
 
                 }
                 if (handled)
-                    txtInput.Clear();
+                    emulator.txtInput = "";
             }
         }
 
-        private void txtStore_KeyDown(object sender, KeyEventArgs e)
+        private void txtStore_KeyDown(object sender, ConsoleKeyInfo e)
         {
-            if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Return)
+            if (e.Key == ConsoleKey.Enter)
             {
-                string varName = txtStore.Text;
-                string varCalculation = txtInput.Text;
+                string varName = emulator.txtStore;
+                string varCalculation = emulator.txtInput;
 
                 if (varName.Length > 0)
                 {
                     Variables.Instance.AddOrUpdateVariable(varName, varCalculation, this.Mode);
-                    txtInput.Text = varName;
+                    emulator.txtInput = varName;
                 }
                 else
                 {
                     // error...
                 }
 
-                txtInput.Enabled = true;
-                txtStore.Visible = false;
-                txtStore.Text = String.Empty;
-                txtInput.Focus();
+                emulator.txtStore = String.Empty;
             }
-        }
-
-        private void AdjustResultBoxToSizes(object sender, EventArgs e)
-        {
-            txtResultDecimal.Width = (int)Math.Abs((txtResultDecimal.Text.Length) * (txtResultDecimal.Font.Size+1));
-            //txtResultBits.Width = (int)Math.Abs((txtResultBits.Text.Length) * (txtResultBits.Font.Size+1));
-            txtResultHex.Width = (int)Math.Abs((txtResultHex.Text.Length) * (txtResultHex.Font.Size+1));
-        }
-
-        /// <summary>
-        /// Handle event when mouse is moved on top of the bits textbox and present a tooltip of the hovered value
-        /// </summary>
-        /// <param name="sender">calling object</param>
-        /// <param name="e">event arguments</param>
-        private void txtResultBits_MouseMove(object sender, MouseEventArgs e)
-        {
-            if (!timer_bitTooltip.Enabled)
-            {
-                Int32? bit = txtResultBits.GetBit(e.Location, 4);
-                if (bit.HasValue)
-                {
-                    tooltip.ToolTipTitle = String.Format("Bit {0}", bit.Value);
-                    Point p = txtResultBits.Location;
-                    tooltip.Show(String.Format("1<<{0}={1}", bit.Value, 1<<bit.Value), this, p.X + e.X, p.Y + e.Y + 32);
-
-                    timer_bitTooltip.Interval = 50;
-                    timer_bitTooltip.Enabled = true;
-                }
-                else
-                {
-                    tooltip.Hide(this);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Handle event when mouse is mouved off from the bits textbox, hiding the tooltip
-        /// </summary>
-        /// <param name="sender">calling object</param>
-        /// <param name="e">event arguments</param>
-        private void txtResultBits_MouseLeave(object sender, EventArgs e)
-        {
-            tooltip.Hide(this);
-        }
-
-        /// <summary>
-        /// Handle fire event on tooltip timer. The tooltip timer prevents the tooltip from redrawing too often
-        /// </summary>
-        /// <param name="sender">calling object</param>
-        /// <param name="e">event arguments</param>
-        private void timer_bitTooltip_Tick(object sender, EventArgs e)
-        {
-            timer_bitTooltip.Enabled = false;
         }
     }
 }
